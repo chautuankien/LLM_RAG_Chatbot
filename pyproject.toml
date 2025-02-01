@@ -1,0 +1,29 @@
+[project]
+name = "llm-rag-chatbot"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "killermama98",email = "ctkiena2@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10, <4.0"
+dependencies = [
+    "numpy (>=1.2.2,<3.0.0)",
+    "langchain (>=0.3.16,<0.4.0)",
+    "streamlit (>=1.41.1,<2.0.0)",
+    "langchain-openai (>=0.3.2,<0.4.0)",
+    "langchain-milvus (>=0.1.8,<0.2.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "langchain-community (>=0.3.16,<0.4.0)",
+    "rank-bm25 (>=0.2.2,<0.3.0)",
+    "beautifulsoup4 (>=4.12.3,<5.0.0)",
+    "lxml (>=5.3.0,<6.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "llm_rag_chatbot", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
