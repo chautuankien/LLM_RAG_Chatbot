@@ -59,6 +59,15 @@ services:
     depends_on:
       - "etcd"
       - "minio"
+  
+  llm-rag-chatbot:
+    image: llm-rag-chatbot:latest
+    build: ./app
+    command: streamlit run app.py --server.port 8501
+    volumes:
+      - ./:/app/
+    ports:
+      - 8501:8501
 
 networks:
   default:
