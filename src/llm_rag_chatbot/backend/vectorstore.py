@@ -1,4 +1,3 @@
-import os
 from langchain_openai import OpenAIEmbeddings
 from langchain_milvus import Milvus
 
@@ -79,7 +78,7 @@ def add_data_to_milvus_url(url: str, URI_link: str, collection_name: str, doc_na
     return vectorstore
 
 
-def connect_to_milvus(URI_link: str, collection_name: str) -> Milvus:
+def connect_to_milvus(URI_link: str, collection_name: str,  embedding_choice: str) -> Milvus:
     """
     Connect to Milvus database
     Args:
@@ -88,7 +87,8 @@ def connect_to_milvus(URI_link: str, collection_name: str) -> Milvus:
     Returns:
         Milvus: Milvus database
     """
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+    if embedding_choice == "OpenAI":
+        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
     vectorstore = Milvus(
         embedding_function=embeddings,
         connection_args={"uri": URI_link},

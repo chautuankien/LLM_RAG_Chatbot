@@ -14,19 +14,19 @@ import os
 from src.llm_rag_chatbot.backend.vectorstore import connect_to_milvus
 
 # Load OPENAPI KEY
-load_dotenv()
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL")
+# load_dotenv()
+# DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+# DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL")
  
 
-def get_retriever(collection_name: str = 'data_test') -> EnsembleRetriever:
+def get_retriever(collection_name: str, embedding_choice: str) -> EnsembleRetriever:
     """
     Create an ensemble retriver combine vector search (dense retriver) and BM25 (sparse retriver)
     Args:
         collection_name (str): collection name for Milvus vector search
     """
     try:
-        vectorstore = connect_to_milvus('http://localhost:19530', collection_name)
+        vectorstore = connect_to_milvus('http://localhost:19530', collection_name, embedding_choice)
         milvus_retriever = vectorstore.as_retriever(
             search_type="similarity",
             search_kwargs={"k": 4}
@@ -63,7 +63,7 @@ def get_retriever(collection_name: str = 'data_test') -> EnsembleRetriever:
         ]
         return BM25Retriever.from_documents(default_doc)
 
-def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str = 'gpt-4o-mini'):
+def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, api_key:str):
     """
     Create LLMs and Agent
     Args:
@@ -73,12 +73,20 @@ def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str = 'gpt-4o-
     # Initialize LLM model
     if model_choice == 'DeepSeek':
         llm = ChatOpenAI(
-            temperature=0,
+            temperature=0.2,
             streaming=True,
             model='deepseek-chat',
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_BASE_URL,
+            api_key=api_key,
+            base_url="https://api.deepseek.com",
         )
+    elif model_choice == 'GPT-4o-mini':
+        llm = ChatOpenAI(
+            temperature=0.2,
+            streaming=True,
+            model='gpt-4o-mini',
+            api_key=api_key,
+        )
+    
     
     # Initialize search tool for agent
     tool = create_retriever_tool(

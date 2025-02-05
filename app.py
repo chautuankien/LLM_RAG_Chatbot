@@ -3,12 +3,11 @@ from src.llm_rag_chatbot.frontend.frontend import initialize_app, setup_side_bar
 
 def main():
     initialize_app()
-    model_choice, collection_to_query = setup_side_bar()
-    msgs = setup_chat_interface(model_choice)
+    model_choice, embedding_choice, api_key, collection_to_query = setup_side_bar()
+    msgs = setup_chat_interface()
 
-    if model_choice == "DeepSeek":
-        retriever = get_retriever(collection_to_query)
-        agent_executor = get_llm_and_agent(retriever, model_choice)
+    retriever = get_retriever(collection_to_query, embedding_choice)
+    agent_executor = get_llm_and_agent(retriever, model_choice, api_key)
     
     handle_user_input(msgs, agent_executor)
 

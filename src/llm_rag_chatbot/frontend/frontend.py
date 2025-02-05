@@ -24,11 +24,20 @@ def setup_side_bar():
     Custom sidebar
     """
     with st.sidebar:
-        st.title("🤖 LLM RAG Chatbot")
+        st.title("🤖 Setup")
+
+        # Choose AI Model0
+        model_choice = st.selectbox(
+            "Choose AI Model",
+            ["DeepSeek", "GPT-4o-mini"]
+        )
+        api_key = st.text_input("Type API Key", type="password")
+        if not api_key:
+            st.warning("Please enter an API Key.")
+            st.stop()
 
         # Choose Embedding model
-        st.header("Choose Embedding model")
-        embedding_choice = st.radio(
+        embedding_choice = st.selectbox(
             "Choose Embedding model",
             ["OpenAI"]
         )
@@ -54,14 +63,7 @@ def setup_side_bar():
             help="Type collection name you want to use to query infomation"
         )
 
-        # Choose AI Model
-        st.header("Choose AI Model")
-        model_choice = st.radio(
-            "Choose AI Model",
-            ["DeepSeek"]
-        )
-
-        return model_choice, collection_to_query
+        return model_choice, embedding_choice, api_key, collection_to_query
                               
 def handle_local_file(embedding_choice: str):
     """
@@ -131,12 +133,8 @@ def handle_url_input(embedding_choice: str):
 
 
 # ==== MAIN INTERFACE ====
-def setup_chat_interface(model_choice: str):
+def setup_chat_interface():
     st.title("🤖 LLM RAG Chatbot")
-
-    # Auto Caption based on model choice
-    if model_choice == "DeepSeek":
-        st.caption("🚀 AI Assistant using LangChain and DeepSeek")
     
     msgs = StreamlitChatMessageHistory(key="langchain_messages")
 
