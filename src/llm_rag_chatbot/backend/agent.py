@@ -5,13 +5,12 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import create_retriever_tool
+from langchain_core.vectorstores import VectorStore
 from langchain.retrievers import EnsembleRetriever
 from langchain.agents import create_openai_functions_agent, AgentExecutor
 
-from dotenv import load_dotenv
-import os
 
-from src.llm_rag_chatbot.backend.vectorstore import connect_to_milvus
+from src.llm_rag_chatbot.backend.vectorstore import milvus_initialization
 
 # Load OPENAPI KEY
 # load_dotenv()
@@ -19,15 +18,15 @@ from src.llm_rag_chatbot.backend.vectorstore import connect_to_milvus
 # DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL")
  
 
-def get_retriever(collection_name: str, embedding_choice: str) -> EnsembleRetriever:
+def get_retriever(vectorstore: VectorStore, collection_name: str) -> EnsembleRetriever:
     """
     Create an ensemble retriver combine vector search (dense retriver) and BM25 (sparse retriver)
     Args:
         collection_name (str): collection name for Milvus vector search
     """
     try:
-        vectorstore = connect_to_milvus('http://localhost:19530', collection_name, embedding_choice)
-        milvus_retriever = vectorstore.as_retriever(
+        # Create  vector retriever
+        retriever = vectorstore.as_retriever(
             search_type="similarity",
             search_kwargs={"k": 4}
         )
@@ -46,7 +45,7 @@ def get_retriever(collection_name: str, embedding_choice: str) -> EnsembleRetrie
 
         # Initialize ensemble retriever
         ensemble_retriever = EnsembleRetriever(
-            retrievers=[bm25_retriever, milvus_retriever],
+            retrievers=[bm25_retriever, retriever],
             weights=[0.3, 0.7]
         )
 
@@ -63,7 +62,7 @@ def get_retriever(collection_name: str, embedding_choice: str) -> EnsembleRetrie
         ]
         return BM25Retriever.from_documents(default_doc)
 
-def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, api_key:str):
+def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, llm_api_key:str):
     """
     Create LLMs and Agent
     Args:
@@ -76,15 +75,15 @@ def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, api_key:s
             temperature=0.2,
             streaming=True,
             model='deepseek-chat',
-            api_key=api_key,
+            api_key=llm_api_key,
             base_url="https://api.deepseek.com",
         )
-    elif model_choice == 'GPT-4o-mini':
+    elif model_choice == 'OpenAI':
         llm = ChatOpenAI(
             temperature=0.2,
             streaming=True,
             model='gpt-4o-mini',
-            api_key=api_key,
+            api_key=llm_api_key,
         )
     
     

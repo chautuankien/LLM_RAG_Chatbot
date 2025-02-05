@@ -5,6 +5,7 @@ from langchain_community.chat_message_histories import StreamlitChatMessageHisto
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 
 from src.llm_rag_chatbot.backend.vectorstore import add_data_to_milvus_local, add_data_to_milvus_url
+from src.llm_rag_chatbot.backend.data_parser import pdf_parser
 
 def setup_page():
     st.set_page_config(
@@ -24,48 +25,52 @@ def setup_side_bar():
     Custom sidebar
     """
     with st.sidebar:
-        st.title("🤖 Setup")
+        with st.popover("Setup"):
+            # Choose AI Model0
+            model_choice = st.selectbox(
+                "Choose AI Model",
+                ["DeepSeek", "OpenAI"]
+            )
+        
+            # Choose Embedding model
+            embedding_choice = st.selectbox(
+                "Choose Embedding model",
+                ["OpenAI"]
+            )
 
-        # Choose AI Model0
-        model_choice = st.selectbox(
-            "Choose AI Model",
-            ["DeepSeek", "GPT-4o-mini"]
-        )
-        api_key = st.text_input("Type API Key", type="password")
-        if not api_key:
-            st.warning("Please enter an API Key.")
+            if model_choice == embedding_choice == "OpenAI":
+                llm_api_key = embedding_api_key = st.text_input("Enter API Key", type="password")
+            else:
+                llm_api_key = st.text_input("Enter LLM API Key", type="password")
+                embedding_api_key = st.text_input("Enter Embedding API Key", type="password")
+        
+        if not llm_api_key or not embedding_api_key:
+            st.warning("Please enter API Key.")
             st.stop()
 
-        # Choose Embedding model
-        embedding_choice = st.selectbox(
-            "Choose Embedding model",
-            ["OpenAI"]
-        )
-
         # Choose Source Data
-        st.header("Choose Source Data")
-        data_source = st.radio(
+        data_source = st.selectbox(
             "Choose Source Data",
-            ["File Local", "URL"]
+            ["Upload File", "URL"]
         )
         
         # Process Source Data based on Embedding choice
-        if data_source == "File Local":
-            handle_local_file(embedding_choice=embedding_choice)
+        if data_source == "Upload File":
+            handle_upload_file(embedding_choice=embedding_choice)
         else:
             handle_url_input(embedding_choice=embedding_choice)
         
         # Add collection to query
         st.header("Collection to query")
-        collection_to_query = st.text_input(
+        collection_name = st.text_input(
             "Type collection name need to query",
             "data_test",
             help="Type collection name you want to use to query infomation"
         )
 
-        return model_choice, embedding_choice, api_key, collection_to_query
+        return model_choice, embedding_choice, llm_api_key, embedding_api_key, collection_name
                               
-def handle_local_file(embedding_choice: str):
+def handle_upload_file(embedding_choice: str):
     """
     Handle when user choose to upload local file
     """
@@ -81,10 +86,9 @@ def handle_local_file(embedding_choice: str):
         help="Type directory path where the PDF files are stored",
     )
 
-    if st.button("Load data from local"):
-        if not collection_name:
-            st.error("Please enter a collection name.")
-            return
+    uploaded_file = st.file_uploader("Upload Files", accept_multiple_files=False)
+    if not uploaded_file:
+        raw_data = pdf_parser(uploaded_file)
 
         with st.spinner("Loading data..."):
             try:
@@ -97,6 +101,7 @@ def handle_local_file(embedding_choice: str):
                 st.success("Data loaded successfully!")
             except Exception as e:
                 st.error(f"Error loading data: {e}")
+   
 
 def handle_url_input(embedding_choice: str):
     """

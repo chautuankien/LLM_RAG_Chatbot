@@ -36,9 +36,9 @@ services:
       timeout: 20s
       retries: 3
 
-  standalone:
+  milvus:
     container_name: milvus-standalone
-    image: milvusdb/milvus:v2.4.14
+    image: milvusdb/milvus:v2.4.12
     command: ["milvus", "run", "standalone"]
     security_opt:
     - seccomp:unconfined
@@ -59,16 +59,19 @@ services:
     depends_on:
       - "etcd"
       - "minio"
-  
-  llm-rag-chatbot:
-    image: llm-rag-chatbot:latest
-    build: ./app
-    command: streamlit run app.py --server.port 8501
-    volumes:
-      - ./:/app/
+
+  attu:
+    container_name: milvus-attu
+    image: zilliz/attu:v2.4
+    environment:
+      MILVUS_URL: milvus:19530
     ports:
-      - 8501:8501
+      - "8000:3000"
+    depends_on:
+      - "milvus"
+    networks:
+      - default
 
 networks:
   default:
-    name: milvus
+    name: milvus_network
