@@ -1,6 +1,9 @@
 from src.llm_rag_chatbot.frontend.frontend import initialize_app, setup_side_bar, setup_chat_interface, handle_user_input
-from src.llm_rag_chatbot.backend.agent import get_retriever, get_llm_and_agent
+
+from src.llm_rag_chatbot.backend.embedding import get_embeddings_model
 from src.llm_rag_chatbot.backend.vectorstore import milvus_initialization
+from src.llm_rag_chatbot.backend.agent import get_retriever, get_llm_and_agent
+
 
 def main():
     # Initialize frontend
@@ -9,7 +12,8 @@ def main():
     msgs = setup_chat_interface()
 
     # Initialize backend
-    vectorstore = milvus_initialization('http://localhost:19530', collection_name, embedding_choice, embedding_api_key)
+    embedding = get_embeddings_model(embedding_choice, embedding_api_key)
+    vectorstore = milvus_initialization('http://localhost:19530', collection_name, embedding)
     retriever = get_retriever(vectorstore, collection_name)
     agent_executor = get_llm_and_agent(retriever, model_choice, llm_api_key)
     

@@ -1,28 +1,21 @@
 from langchain_openai import OpenAIEmbeddings
 from langchain_milvus import Milvus
 from langchain_core.vectorstores import VectorStore
+from langchain_core.embeddings.embeddings import Embeddings
 
 from dotenv import load_dotenv, find_dotenv
 from uuid import uuid4
 from src.llm_rag_chatbot.backend.documents_loader import crawl_web, load_pdf_from_local
 
-load_dotenv(find_dotenv())
+from unstructured.documents.elements import Element
 
-def add_data_to_milvus_local(dir_path: str, URI_link: str, collection_name: str, embedding_choice: str):
-    # Load documents
-    documents = load_pdf_from_local(directory=dir_path)
-
-    # Create Embedding model
-    print(embedding_choice)
-    if embedding_choice == "OpenAI":
-        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-
-    # Create unique id for each document
+def add_data_to_milvus_local(raw_data: list[Element], URI_link: str, collection_name: str, embedding_model: Embeddings):
+ # Create unique id for each document
     uuids = [str(uuid4()) for _ in range(len(documents))]
 
     # Create Milvus database object
     vectorstore = Milvus(
-        embedding_function=embeddings,
+        embedding_function=embedding_model,
         connection_args={"uri": URI_link},
         collection_name=collection_name,
         drop_old=True   # delete data if exists in collection
@@ -79,7 +72,7 @@ def add_data_to_milvus_url(url: str, URI_link: str, collection_name: str, doc_na
     return vectorstore
    
 
-def milvus_initialization(URI_link: str, collection_name: str,  embedding_choice: str, embedding_api_key: str) -> VectorStore:
+def milvus_initialization(URI_link: str, collection_name: str,  embedding_model: Embeddings) -> VectorStore:
     """
     Connect to Milvus database
     Args:
@@ -87,12 +80,9 @@ def milvus_initialization(URI_link: str, collection_name: str,  embedding_choice
         collection_name (str): Collection name in Milvus database
     Returns:
         Milvus: Milvus database
-    """
-    if embedding_choice == "OpenAI":
-        embeddings = OpenAIEmbeddings(model="text-embedding-3-large", api_key=embedding_api_key)
-        
+    """    
     vectorstore = Milvus(
-        embedding_function=embeddings,
+        embedding_function=embedding_model,
         connection_args={"uri": URI_link},
         collection_name=collection_name,
     )
