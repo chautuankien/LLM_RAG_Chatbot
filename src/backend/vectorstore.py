@@ -2,30 +2,21 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_milvus import Milvus
 from langchain_core.vectorstores import VectorStore
 from langchain_core.embeddings.embeddings import Embeddings
+from langchain_core.documents import Document
 
-from dotenv import load_dotenv, find_dotenv
+from backend.documents_loader import crawl_web, load_pdf_from_local
+
 from uuid import uuid4
-from src.llm_rag_chatbot.backend.documents_loader import crawl_web, load_pdf_from_local
+from collections.abc import Sequence
 
-from unstructured.documents.elements import Element
+import streamlit as st
 
-def add_data_to_milvus_local(raw_data: list[Element], URI_link: str, collection_name: str, embedding_model: Embeddings):
- # Create unique id for each document
-    uuids = [str(uuid4()) for _ in range(len(documents))]
-
-    # Create Milvus database object
-    vectorstore = Milvus(
-        embedding_function=embedding_model,
-        connection_args={"uri": URI_link},
-        collection_name=collection_name,
-        drop_old=True   # delete data if exists in collection
-    )
-
+def add_files_to_milvus(documents: Sequence[list[Document]], vectorstore: VectorStore) -> None:
     # Add documents into Milvus
-    vectorstore.add_documents(documents=documents, ids=uuids)
+    for i in range(len(documents)):
+        vectorstore.add_documents(documents=documents[i])
     print(f'vectorstore: {vectorstore}')
 
-    return vectorstore
 
 def add_data_to_milvus_url(url: str, URI_link: str, collection_name: str, doc_name: str, embedding_choice: str) -> Milvus:
     """"
@@ -81,9 +72,20 @@ def milvus_initialization(URI_link: str, collection_name: str,  embedding_model:
     Returns:
         Milvus: Milvus database
     """    
-    vectorstore = Milvus(
-        embedding_function=embedding_model,
-        connection_args={"uri": URI_link},
-        collection_name=collection_name,
-    )
-    return vectorstore
+    try:
+        vectorstore = Milvus(
+            embedding_function=embedding_model,
+            connection_args={"uri": URI_link},
+            collection_name=collection_name,
+        )
+        return vectorstore
+    except Exception as e:
+        st.error(body=f"Error connecting to Milvus: {e}. Creating local Milvus database.")
+        
+        local_link: str = "./milvus_example.db"
+        vectorstore = Milvus(
+            embedding_function=embedding_model,
+            connection_args={"uri": local_link},
+            collection_name=collection_name,
+        )
+        return vectorstore

@@ -22,8 +22,11 @@ dependencies = [
 ]
 
 [tool.poetry]
-packages = [{include = "llm_rag_chatbot", from = "src"}]
+packages = [{include = "src"}]
 
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.15.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

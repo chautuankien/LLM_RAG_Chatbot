@@ -10,7 +10,8 @@ from langchain.retrievers import EnsembleRetriever
 from langchain.agents import create_openai_functions_agent, AgentExecutor
 
 
-from src.llm_rag_chatbot.backend.vectorstore import milvus_initialization
+from backend.vectorstore import milvus_initialization
+from backend.get_model import get_llm_model
 
 # Load OPENAPI KEY
 # load_dotenv()
@@ -18,7 +19,7 @@ from src.llm_rag_chatbot.backend.vectorstore import milvus_initialization
 # DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL")
  
 
-def get_retriever(vectorstore: VectorStore, collection_name: str) -> EnsembleRetriever:
+def get_retriever(vectorstore: VectorStore, collection_name: str) -> EnsembleRetriever|BM25Retriever:
     """
     Create an ensemble retriver combine vector search (dense retriver) and BM25 (sparse retriver)
     Args:
@@ -62,7 +63,7 @@ def get_retriever(vectorstore: VectorStore, collection_name: str) -> EnsembleRet
         ]
         return BM25Retriever.from_documents(default_doc)
 
-def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, llm_api_key:str):
+def get_llm_and_agent(retriever: EnsembleRetriever|BM25Retriever, model_choice: str, llm_api_key:str):
     """
     Create LLMs and Agent
     Args:
@@ -70,22 +71,7 @@ def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, llm_api_k
         model_choise: LLMs model
     """
     # Initialize LLM model
-    if model_choice == 'DeepSeek':
-        llm = ChatOpenAI(
-            temperature=0.2,
-            streaming=True,
-            model='deepseek-chat',
-            api_key=llm_api_key,
-            base_url="https://api.deepseek.com",
-        )
-    elif model_choice == 'OpenAI':
-        llm = ChatOpenAI(
-            temperature=0.2,
-            streaming=True,
-            model='gpt-4o-mini',
-            api_key=llm_api_key,
-        )
-    
+    llm = get_llm_model(model_choice, llm_api_key)
     
     # Initialize search tool for agent
     tool = create_retriever_tool(
@@ -107,16 +93,3 @@ def get_llm_and_agent(retriever: EnsembleRetriever, model_choice: str, llm_api_k
     # Create agent
     agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True)
-
-
-
-if __name__ == "__main__":
-    retriever = get_retriever()
-    # agent_executor = getllm_and_agent(retriever)
-    # response = agent_executor.invoke(
-    #     {
-    #         "input": "how can langsmith help with testing?",
-    #         "chat_history": []
-    #     }
-    # )
-    # print(response)

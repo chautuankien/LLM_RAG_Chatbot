@@ -1,13 +1,19 @@
+import io
+from collections.abc import Sequence
 import streamlit as st
-from dotenv import load_dotenv, find_dotenv
 
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 
-from src.llm_rag_chatbot.backend.vectorstore import add_data_to_milvus_local, add_data_to_milvus_url
-from src.llm_rag_chatbot.backend.data_parser import pdf_parser
+from langchain_core.language_models.base import BaseLanguageModel
+from langchain_core.embeddings.embeddings import Embeddings
+from langchain_core.vectorstores import VectorStore
+from unstructured.documents.elements import Element
 
-def setup_page():
+from backend.vectorstore import add_files_to_milvus, add_data_to_milvus_url
+from backend.utils.data_parser import pdf_parser, extract_and_convert_all_data
+
+def setup_page() -> None:
     st.set_page_config(
         page_title="LLM RAG Chatbot",
         page_icon="🤖",
@@ -15,95 +21,85 @@ def setup_page():
     )
 
 # ==== APP INITIALIZATION ====
-def initialize_app():
-    load_dotenv(find_dotenv())
+def initialize_app() -> None:
     setup_page()
 
 # ==== SIDEBAR ====
-def setup_side_bar():
+def setup_api_keys() -> Sequence[str]:
+    with st.sidebar:
+        with st.popover(label="Setup"):
+            # Choose AI Model0
+            model_choice: str = st.selectbox(
+                label="Choose AI Model",
+                options=["DeepSeek", "OpenAI"]
+            )
+        
+            # Choose Embedding model
+            embedding_choice: str = st.selectbox(
+                label="Choose Embedding model",
+                options=["OpenAI"]
+            )
+
+            # Enter collection name in Milvus database
+            collection_name: str = st.text_input(
+                label="Type collection name need to query",
+                value="data_test",
+                help="Type collection name you want to use to query infomation"
+            )
+
+            if model_choice == embedding_choice == "OpenAI":
+                llm_api_key: str = st.text_input(label="Enter API Key", type="password")
+                embedding_api_key: str = llm_api_key
+            else:
+                llm_api_key: str = st.text_input(label="Enter LLM API Key", type="password")
+                embedding_api_key: str = st.text_input(label="Enter Embedding API Key", type="password")
+        
+        if not llm_api_key or not embedding_api_key:
+            st.warning(body="Please enter API Key.")
+            st.stop()
+
+    return model_choice, embedding_choice, llm_api_key, embedding_api_key, collection_name
+
+def setup_data_source(llm: BaseLanguageModel | None, vectorstore: VectorStore) -> None:
     """
     Custom sidebar
     """
     with st.sidebar:
-        with st.popover("Setup"):
-            # Choose AI Model0
-            model_choice = st.selectbox(
-                "Choose AI Model",
-                ["DeepSeek", "OpenAI"]
-            )
-        
-            # Choose Embedding model
-            embedding_choice = st.selectbox(
-                "Choose Embedding model",
-                ["OpenAI"]
-            )
-
-            if model_choice == embedding_choice == "OpenAI":
-                llm_api_key = embedding_api_key = st.text_input("Enter API Key", type="password")
-            else:
-                llm_api_key = st.text_input("Enter LLM API Key", type="password")
-                embedding_api_key = st.text_input("Enter Embedding API Key", type="password")
-        
-        if not llm_api_key or not embedding_api_key:
-            st.warning("Please enter API Key.")
-            st.stop()
-
         # Choose Source Data
-        data_source = st.selectbox(
-            "Choose Source Data",
-            ["Upload File", "URL"]
+        data_source: str = st.selectbox(
+            label="Choose Source Data",
+            options=["Upload File", "URL"]
         )
         
-        # Process Source Data based on Embedding choice
+        # Process Source Data
         if data_source == "Upload File":
-            handle_upload_file(embedding_choice=embedding_choice)
-        else:
-            handle_url_input(embedding_choice=embedding_choice)
+            handle_upload_files(llm=llm, vectorstore=vectorstore)
+        # else:
+        #     handle_url_input(embedding=llm)
         
-        # Add collection to query
-        st.header("Collection to query")
-        collection_name = st.text_input(
-            "Type collection name need to query",
-            "data_test",
-            help="Type collection name you want to use to query infomation"
-        )
-
-        return model_choice, embedding_choice, llm_api_key, embedding_api_key, collection_name
                               
-def handle_upload_file(embedding_choice: str):
+def handle_upload_files(llm: BaseLanguageModel | None, vectorstore: VectorStore) -> None:
     """
     Handle when user choose to upload local file
     """
-    collection_name = st.text_input(
-        "Collection name in database",
-        "data_test",
-        help="Type collection name you want to use to store in database",
-    )
 
-    dir_path = st.text_input(
-        "Directory containing PDF files", 
-        "data",
-        help="Type directory path where the PDF files are stored",
-    )
-
-    uploaded_file = st.file_uploader("Upload Files", accept_multiple_files=False)
+    uploaded_file: io.BytesIO | None = st.file_uploader(label="Upload Files", accept_multiple_files=False)
     if not uploaded_file:
-        raw_data = pdf_parser(uploaded_file)
+        with st.spinner(text="Process data..."):
+            raw_data: list[Element] | None = pdf_parser(input_data=uploaded_file)
+            text_docs, image_docs, table_docs = extract_and_convert_all_data(elements=raw_data, decription_model=llm)
 
-        with st.spinner("Loading data..."):
             try:
-                add_data_to_milvus_local(
-                    dir_path,
-                    'http://localhost:19530', 
-                    collection_name,
-                    embedding_choice=embedding_choice
+                add_files_to_milvus(
+                    documents=[text_docs, image_docs, table_docs],
+                    vectorstore=vectorstore
                 )
-                st.success("Data loaded successfully!")
+                st.success(body="Data loaded successfully!")
             except Exception as e:
-                st.error(f"Error loading data: {e}")
+                st.error(body=f"Error loading data: {e}")
    
 
-def handle_url_input(embedding_choice: str):
+def handle_url_input(embedding: Embeddings):
     """
     Handle when user choose to input URL
     """
