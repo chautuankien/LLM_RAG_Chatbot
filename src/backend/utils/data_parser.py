@@ -216,17 +216,13 @@ def convert_to_documents(data: list[dict]) -> list[Document]:
 
 def extract_and_convert_all_data(elements: list[Element] | None, decription_model: BaseLanguageModel) -> Sequence[list[Document]]:
     text_data: list[dict] = extract_text_data(elements=elements)
-    image_data: list[dict] = extract_image_data_with_summary(elements=elements, decription_model=decription_model)
-    table_data: list[dict] = extract_table_data_with_summary(elements=elements, decription_model=decription_model)
+    # image_data: list[dict] = extract_image_data_with_summary(elements=elements, decription_model=decription_model)
+    # table_data: list[dict] = extract_table_data_with_summary(elements=elements, decription_model=decription_model)
 
     text_docs: list[Document] = convert_to_documents(data=text_data)
-    image_docs: list[Document] = convert_to_documents(data=image_data)
-    table_docs: list[Document] = convert_to_documents(data=table_data)
+    # image_docs: list[Document] = convert_to_documents(data=image_data)
+    # table_docs: list[Document] = convert_to_documents(data=table_data)
+    image_docs, table_docs = None, None
 
     return text_docs, image_docs, table_docs
 
-
-if __name__ == "__main__":
-    file = "src/backend/data_parser/data_samples/Video_Swin_Transformer.pdf"
-    raw_data: list[Element] | None = pdf_parser(input_data=file)
-    print(raw_data)

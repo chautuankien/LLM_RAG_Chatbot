@@ -12,11 +12,11 @@ from collections.abc import Sequence
 import streamlit as st
 
 def add_files_to_milvus(documents: Sequence[list[Document]], vectorstore: VectorStore) -> None:
-    # Add documents into Milvus
+    # Add documents into Milvus   
     for i in range(len(documents)):
-        vectorstore.add_documents(documents=documents[i])
-    print(f'vectorstore: {vectorstore}')
-
+        if documents[i] is not None:
+            vectorstore.add_documents(documents=documents[i], ids=[str(uuid4()) for _ in range(len(documents[i]))])
+    
 
 def add_data_to_milvus_url(url: str, URI_link: str, collection_name: str, doc_name: str, embedding_choice: str) -> Milvus:
     """"
@@ -77,6 +77,7 @@ def milvus_initialization(URI_link: str, collection_name: str,  embedding_model:
             embedding_function=embedding_model,
             connection_args={"uri": URI_link},
             collection_name=collection_name,
+            auto_id=True
         )
         return vectorstore
     except Exception as e:
@@ -87,5 +88,6 @@ def milvus_initialization(URI_link: str, collection_name: str,  embedding_model:
             embedding_function=embedding_model,
             connection_args={"uri": local_link},
             collection_name=collection_name,
+            auto_id=True
         )
         return vectorstore

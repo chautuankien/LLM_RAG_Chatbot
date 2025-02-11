@@ -6,17 +6,13 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import create_retriever_tool
 from langchain_core.vectorstores import VectorStore
+from langchain_core.language_models.base import BaseLanguageModel
 from langchain.retrievers import EnsembleRetriever
-from langchain.agents import create_openai_functions_agent, AgentExecutor
+from langchain.agents import AgentExecutor, create_react_agent, create_tool_calling_agent
+from langchain_community.chat_message_histories.streamlit import StreamlitChatMessageHistory
+from langchain.memory import ConversationBufferMemory
 
-
-from backend.vectorstore import milvus_initialization
-from backend.get_model import get_llm_model
-
-# Load OPENAPI KEY
-# load_dotenv()
-# DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-# DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL")
+from backend.utils.tools import get_DuckDuckGoSearchResults_tool
  
 
 def get_retriever(vectorstore: VectorStore, collection_name: str) -> EnsembleRetriever|BM25Retriever:
@@ -63,23 +59,28 @@ def get_retriever(vectorstore: VectorStore, collection_name: str) -> EnsembleRet
         ]
         return BM25Retriever.from_documents(default_doc)
 
-def get_llm_and_agent(retriever: EnsembleRetriever|BM25Retriever, model_choice: str, llm_api_key:str):
+def get_llm_and_agent(retriever: EnsembleRetriever|BM25Retriever, llm_model: BaseLanguageModel, msgs: StreamlitChatMessageHistory):
     """
     Create LLMs and Agent
     Args:
         retriever: ensemble retriever
         model_choise: LLMs model
-    """
-    # Initialize LLM model
-    llm = get_llm_model(model_choice, llm_api_key)
-    
+    """  
+    memory = ConversationBufferMemory(
+        chat_memory=msgs,
+        return_messages=True,
+        memory_key="chat_history",
+        output_key="output",
+    )
+
     # Initialize search tool for agent
-    tool = create_retriever_tool(
+    retriever_tool = create_retriever_tool(
         retriever=retriever,
         name='find',
-        description='Search for information of Stack AI.'
+        description='Search tool'
     )
-    tools = [tool]
+    search_tool = get_DuckDuckGoSearchResults_tool()
+    tools = [retriever_tool, search_tool]
 
     # Create prompt template for agent
     system_template = """You are an expert in AI. Your name is ChatchatAI"""
@@ -91,5 +92,5 @@ def get_llm_and_agent(retriever: EnsembleRetriever|BM25Retriever, model_choice: 
     ])
 
     # Create agent
-    agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+    agent = create_tool_calling_agent(llm=llm_model, tools=tools, prompt=prompt)
+    return AgentExecutor(agent=agent, tools=tools, memory=memory, return_intermediate_steps=True, verbose=True)

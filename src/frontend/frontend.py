@@ -1,17 +1,23 @@
-import io
 from collections.abc import Sequence
-import streamlit as st
+from dotenv import load_dotenv
+import logging.config
+from functools import partial
 
+import streamlit as st
+from streamlit_feedback import streamlit_feedback
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
-
 from langchain_core.language_models.base import BaseLanguageModel
-from langchain_core.embeddings.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
-from unstructured.documents.elements import Element
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tracers.context import tracing_v2_enabled
+from langsmith import Client, traceable
 
-from backend.vectorstore import add_files_to_milvus, add_data_to_milvus_url
-from backend.utils.data_parser import pdf_parser, extract_and_convert_all_data
+from frontend.frontend_utils import handle_upload_files
+
+logger = logging.getLogger(name="frontend")
+
+client = Client()
 
 def setup_page() -> None:
     st.set_page_config(
@@ -23,6 +29,10 @@ def setup_page() -> None:
 # ==== APP INITIALIZATION ====
 def initialize_app() -> None:
     setup_page()
+    load_dotenv()
+
+    if "feedback_key" not in st.session_state:
+        st.session_state.feedback_key = 0
 
 # ==== SIDEBAR ====
 def setup_api_keys() -> Sequence[str]:
@@ -77,77 +87,77 @@ def setup_data_source(llm: BaseLanguageModel | None, vectorstore: VectorStore) -
         # else:
         #     handle_url_input(embedding=llm)
         
-                              
-def handle_upload_files(llm: BaseLanguageModel | None, vectorstore: VectorStore) -> None:
-    """
-    Handle when user choose to upload local file
-    """
-
-    uploaded_file: io.BytesIO | None = st.file_uploader(label="Upload Files", accept_multiple_files=False)
-    if not uploaded_file:
-        with st.spinner(text="Process data..."):
-            raw_data: list[Element] | None = pdf_parser(input_data=uploaded_file)
-            text_docs, image_docs, table_docs = extract_and_convert_all_data(elements=raw_data, decription_model=llm)
-
-            try:
-                add_files_to_milvus(
-                    documents=[text_docs, image_docs, table_docs],
-                    vectorstore=vectorstore
-                )
-                st.success(body="Data loaded successfully!")
-            except Exception as e:
-                st.error(body=f"Error loading data: {e}")
-   
-
-def handle_url_input(embedding: Embeddings):
-    """
-    Handle when user choose to input URL
-    """
-    collection_name = st.text_input(
-        "Collection name in database",
-        "data_test",
-        help="Type collection name you want to use to store in database",
-    )
-    doc_name = st.text_input(
-        "Document name",
-        "stack_ai",
-        help="Type document name you want to store in"
-    )
-    url = st.text_input("URL")
-
-    if st.button("Load data from URL"):
-        if not collection_name:
-            st.error("Please enter a collection name.")
-            return
-        with st.spinner("Loading data..."):
-            try:
-                add_data_to_milvus_url(
-                    url,
-                    'http://localhost:19530',
-                    collection_name,
-                    doc_name,
-                    embedding_choice
-                )
-                st.success("Data loaded successfully!")
-            except Exception as e:
-                st.error(f"Error loading data: {e}")
-
-
+                            
 # ==== MAIN INTERFACE ====
+def _submit_feedback(user_response: dict, emoji=None, run_id=None):
+    score = {"👍": 1, "👎": 0}.get(user_response.get("score"))
+    client.create_feedback(
+        run_id=run_id,
+        key=user_response["type"],
+        score=score,
+        comment=user_response.get("text"),
+        value=user_response.get("score"),
+    )
+    return user_response
+
 def setup_chat_interface():
     st.title("🤖 LLM RAG Chatbot")
     
     msgs = StreamlitChatMessageHistory(key="langchain_messages")
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Hello! How can I help you today?"}
-        ]
-        msgs.add_ai_message("Hello! How can I help you today?")
+    if len(msgs.messages) == 0 or st.sidebar.button("Clear message history"):
+        msgs.clear()
+        st.session_state.immediate_steps = {}
+        # msgs.add_ai_message("Hello! How can I help you today?")
+        if "messages" not in st.session_state:
+            st.session_state.messages = [
+                {"role": "assistant", "content": "Hello! How can I help you today?"}
+            ]
+            msgs.add_ai_message("Hello! How can I help you today?")
     
-    for msg in st.session_state.messages:
-        role = "assistant" if msg["role"] == "assistant" else "human"
-        st.chat_message(role).write(msg["content"])
+    # for msg in st.session_state.messages:
+    #     role = "assistant" if msg["role"] == "assistant" else "human"
+    #     st.chat_message(role).write(msg["content"])
+
+    feedback_kwargs = {
+        "feedback_type": "thumbs",
+        "optional_text_label": "Rate this response in LangSmith",
+    }
+    
+    avatars = {"human": "user", "ai": "assistant"}
+    for idx, msg in enumerate(msgs.messages):
+        with st.chat_message(avatars[msg.type]):
+            # Render intermediate steps if any were saved
+            for step in st.session_state.immediate_steps.get(str(idx), []):
+                if step[0].tool == "_Exception":
+                    continue
+                with st.status(f"**{step[0].tool}**: {step[0].tool_input}", state="complete"):
+                    st.write(step[0].log)
+                    st.write(step[1])
+            st.write(msg.content)
+        
+        if msg.type == "ai":
+            feedback_key = f"feedback_{int(idx/2)}"
+
+            if feedback_key not in st.session_state:
+                st.session_state[feedback_key] = None
+            if f"run_{int(idx/2)}" not in st.session_state:
+                st.session_state[f"run_{int(idx/2)}"] = 0
+
+            disable_with_score = (
+                st.session_state[feedback_key].get("score")
+                if st.session_state[feedback_key]
+                else None
+            )
+            # This actually commits the feedback
+            streamlit_feedback(
+                **feedback_kwargs,
+                key=feedback_key,
+                disable_with_score=disable_with_score,
+                on_submit=partial(
+                    _submit_feedback, run_id=st.session_state[f"run_{int(idx/2)}"]
+                ),
+            )
     
     return msgs
 
@@ -159,6 +169,12 @@ def handle_user_input(msgs, agent_executor):
     3. Add response to chat history
     """
 
+    if st.session_state.get("run_url"):
+        st.markdown(
+            f"View trace in [🦜🛠️ LangSmith]({st.session_state.run_url})",
+            unsafe_allow_html=True,
+        )
+
     if prompt := st.chat_input("Ask me anything..."):
         # Save and show user message
         st.session_state.messages.append({"role":"human", "content": prompt})
@@ -166,29 +182,58 @@ def handle_user_input(msgs, agent_executor):
         msgs.add_user_message(prompt)
 
         # Process user input and show AI response
+        
         with st.chat_message("assistant"):
             st_callback = StreamlitCallbackHandler(st.container())
+            cfg = RunnableConfig()
+            cfg["callbacks"] = [st_callback]
             
             # Get chat history
             chat_history = [
                 {"role": msg["role"], "content": msg["content"]}
                 for msg in st.session_state.messages[:-1]
             ]
+            with tracing_v2_enabled("langsmith-streamlit-agent") as cb:
+                # Get AI response
+                response = agent_executor.invoke(
+                    {
+                        "input": prompt,
+                        "chat_history": chat_history
+                    },
+                    cfg
+                )
 
-            # Get AI response
-            response = agent_executor.invoke(
-                {
-                    "input": prompt,
-                    "chat_history": chat_history
-                },
-                {"callback": [st_callback]}
-            )
+                feedback_kwargs = {
+                    "feedback_type": "thumbs",
+                    "optional_text_label": "Please provide extra information",
+                    "on_submit": _submit_feedback,
+                    }
+                run = cb.latest_run
+                feedback_index = int(
+                (len(st.session_state.get("langchain_messages", [])) - 1) / 2
+                )
+                st.session_state[f"run_{feedback_index}"] = run.id
 
-            # Save and show AI response
-            output = response["output"]
-            st.session_state.messages.append({"role":"assistant", "content": output})
-            st.write(output)
-            msgs.add_ai_message(output)
+                # Save and show AI response
+                # st.session_state.messages.append({"role":"assistant", "content": output})
+                st.write(response["output"])
+                st.session_state.immediate_steps[str(len(msgs.messages) - 1)] = response["intermediate_steps"]
+                # logger.debug(msg=f"LLM response: {response}")
+                # logger.debug(msg=f"Chat history: {msgs.messages}")
+                # msgs.add_ai_message(output)
+
+                # This displays the feedback widget and saves to session state
+                # It will be logged on next render
+                streamlit_feedback(**feedback_kwargs, key=f"feedback_{feedback_index}")
+                try:
+                    url = cb.get_run_url()
+                    st.session_state.run_url = url
+                    st.markdown(
+                        f"View trace in [🦜🛠️ LangSmith]({url})",
+                        unsafe_allow_html=True,
+                    )
+                except Exception:
+                    logger.exception("Failed to get run URL.")
 
 # if __name__ == "__main__":
 #     msgs = setup_chat_interface("DeepSeek")
